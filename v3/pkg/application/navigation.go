@@ -42,10 +42,11 @@ func allowNavigation(window *WebviewWindow, request NavigationRequest) (allow bo
 }
 
 // windowInterceptsNavigationByID is interceptsNavigation for platform
-// callbacks that only carry a window ID.
+// callbacks that only carry a window ID. A window that has gone away is
+// intercepted, so decideNavigation refuses it.
 func windowInterceptsNavigationByID(windowID uint) bool {
 	window := navigationWindow(windowID)
-	return window != nil && window.interceptsNavigation()
+	return window == nil || window.interceptsNavigation()
 }
 
 // decideNavigation is allowNavigation for platform callbacks that only carry

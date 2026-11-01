@@ -40,8 +40,8 @@ func TestInterceptsNavigation(t *testing.T) {
 	if !windowInterceptsNavigationByID(1) {
 		t.Error("a window with OnBeforeNavigate should intercept navigation")
 	}
-	if windowInterceptsNavigationByID(2) {
-		t.Error("an unknown window should not intercept navigation")
+	if !windowInterceptsNavigationByID(2) || decideNavigation(2, NavigationRequest{URL: "https://example.com/", IsMainFrame: true}) {
+		t.Error("an unknown window should be intercepted and refused")
 	}
 
 	withNavigationWindow(t, 1, nil)
