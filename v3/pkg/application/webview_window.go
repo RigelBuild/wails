@@ -375,8 +375,8 @@ func NewWindow(options WebviewWindowOptions) *WebviewWindow {
 
 	result.setupEventMapping()
 
-	if options.OnBeforeNavigate != nil && (runtime.GOOS == "ios" || runtime.GOOS == "android") && globalApplication != nil {
-		globalApplication.warning("window %q: OnBeforeNavigate is not supported on %s and will not be called", options.Name, runtime.GOOS)
+	if options.OnBeforeNavigate != nil && !navigationPolicySupported && globalApplication != nil {
+		globalApplication.warning("window %q: OnBeforeNavigate is not supported by this backend (%s) and will not be called", options.Name, runtime.GOOS)
 	}
 
 	// Listen for window closing events and de
