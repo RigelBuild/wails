@@ -1,4 +1,4 @@
-//go:build !purego && !ios && !android
+//go:build !((linux || darwin) && purego) && !ios && !android
 
 package application
 
