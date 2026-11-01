@@ -1,5 +1,10 @@
 package application
 
+import (
+	"errors"
+	"fmt"
+)
+
 // NavigationRequest describes a navigation that a window's OnBeforeNavigate
 // is being asked to allow or refuse.
 type NavigationRequest struct {
@@ -39,6 +44,29 @@ func (w *WebviewWindow) interceptsNavigation() bool {
 func allowNavigation(window *WebviewWindow, request NavigationRequest) (allow bool) {
 	defer handlePanic()
 	return window.shouldNavigate(request)
+}
+
+// newWindowRequest is the part of WebView2's NewWindowRequested event args
+// that refuseNewWindow uses.
+type newWindowRequest interface {
+	GetUri() (string, error)
+	PutHandled(bool) error
+}
+
+// refuseNewWindow reports a new-window request to the window's policy as a
+// main-frame navigation, then always marks it handled without a window: a
+// default WebView2 popup would not carry the policy.
+func refuseNewWindow(window *WebviewWindow, request newWindowRequest) error {
+	uri, uriErr := request.GetUri()
+	if uriErr == nil {
+		allowNavigation(window, NavigationRequest{URL: uri, IsMainFrame: true})
+	} else {
+		uriErr = fmt.Errorf("reading new window URL: %w", uriErr)
+	}
+	if err := request.PutHandled(true); err != nil {
+		return errors.Join(uriErr, fmt.Errorf("refusing new window: %w", err))
+	}
+	return uriErr
 }
 
 // windowInterceptsNavigationByID is interceptsNavigation for platform
