@@ -2586,6 +2586,10 @@ func (w *windowsWebviewWindow) setupChromium(recovering bool) (ready bool) {
 	chromium.WebResourceRequestedCallback = w.processRequest
 	chromium.ContainsFullScreenElementChangedCallback = w.fullscreenChanged
 	chromium.NavigationStartingCallback = w.navigationStarting
+	if w.parent.interceptsNavigation() {
+		chromium.FrameNavigationStartingCallback = w.frameNavigationStarting
+		chromium.NewWindowRequestedCallback = w.newWindowRequested
+	}
 	chromium.NavigationCompletedCallback = w.navigationCompleted
 	chromium.AcceleratorKeyCallback = w.processKeyBinding
 	chromium.MoveFocusRequestedCallback = w.moveFocusRequested
@@ -2834,8 +2838,51 @@ func (w *windowsWebviewWindow) flash(enabled bool) {
 	w32.FlashWindow(w.hwnd, enabled)
 }
 
-func (w *windowsWebviewWindow) navigationStarting(_ *edge.ICoreWebView2) {
+func (w *windowsWebviewWindow) navigationStarting(_ *edge.ICoreWebView2, args *edge.ICoreWebView2NavigationStartingEventArgs) {
+	// A refused navigation leaves the current document, and the regions it
+	// reported, in place.
+	if !w.allowNavigation(args, true) {
+		return
+	}
 	w.setNonClientHitTestRegions(nil)
+}
+
+func (w *windowsWebviewWindow) frameNavigationStarting(_ *edge.ICoreWebView2, args *edge.ICoreWebView2NavigationStartingEventArgs) {
+	w.allowNavigation(args, false)
+}
+
+// allowNavigation applies the window's OnBeforeNavigate to a navigation
+// WebView2 is about to start, and cancels it when refused. NavigationStarting
+// takes no deferral, so the policy runs here, on the UI thread, before the
+// event handler returns. A URL that cannot be read refuses.
+func (w *windowsWebviewWindow) allowNavigation(args *edge.ICoreWebView2NavigationStartingEventArgs, isMainFrame bool) bool {
+	if !w.parent.interceptsNavigation() || args == nil {
+		return true
+	}
+	uri, err := args.GetUri()
+	if err != nil {
+		globalApplication.error("webview2: reading navigation URL: %v", err)
+	} else if allowNavigation(w.parent, NavigationRequest{URL: uri, IsMainFrame: isMainFrame}) {
+		return true
+	}
+	if err := args.PutCancel(true); err != nil {
+		globalApplication.error("webview2: cancelling navigation: %v", err)
+	}
+	return false
+}
+
+// newWindowRequested applies the window's OnBeforeNavigate to a request to
+// open a new window (target="_blank", window.open), a new top-level document.
+// The request is always marked handled without supplying a window: WebView2's
+// default popup would not carry the policy, and macOS and Linux open no window
+// for these requests either.
+func (w *windowsWebviewWindow) newWindowRequested(_ *edge.ICoreWebView2, args *edge.ICoreWebView2NewWindowRequestedEventArgs) {
+	if args == nil {
+		return
+	}
+	if err := refuseNewWindow(w.parent, args); err != nil {
+		globalApplication.error("webview2: %v", err)
+	}
 }
 
 func (w *windowsWebviewWindow) navigationCompleted(
