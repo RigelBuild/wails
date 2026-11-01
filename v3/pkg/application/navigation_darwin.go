@@ -9,7 +9,8 @@ import "C"
 
 // windowInterceptsNavigation lets the WKNavigationDelegate in
 // webview_window_darwin.m allow a navigation on the spot when the window has
-// no OnBeforeNavigate, which is the common case.
+// no OnBeforeNavigate. A window that no longer resolves is held, so
+// processNavigationAction refuses it.
 //
 //export windowInterceptsNavigation
 func windowInterceptsNavigation(windowID C.uint) C.bool {
