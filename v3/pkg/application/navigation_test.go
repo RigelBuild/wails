@@ -1,6 +1,9 @@
 package application
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestShouldNavigateWithoutPolicyAllows(t *testing.T) {
 	window := &WebviewWindow{}
@@ -143,4 +146,45 @@ func withNavigationWindow(t *testing.T, windowID uint, policy func(Window, Navig
 	globalApplication = app
 	t.Cleanup(func() { globalApplication = previous })
 	return app
+}
+
+type fakeNewWindowRequest struct {
+	uri     string
+	uriErr  error
+	handled bool
+}
+
+func (r *fakeNewWindowRequest) GetUri() (string, error) { return r.uri, r.uriErr }
+
+func (r *fakeNewWindowRequest) PutHandled(handled bool) error {
+	r.handled = handled
+	return nil
+}
+
+func TestRefuseNewWindow(t *testing.T) {
+	appOrigin := func(_ Window, request NavigationRequest) bool {
+		return request.URL == "wails://localhost/"
+	}
+	app := withNavigationWindow(t, 1, appOrigin)
+	window, _ := app.windows[1].(*WebviewWindow)
+
+	for _, tt := range []struct {
+		name    string
+		request *fakeNewWindowRequest
+		wantErr bool
+	}{
+		{name: "allowed app origin", request: &fakeNewWindowRequest{uri: "wails://localhost/"}},
+		{name: "refused URL", request: &fakeNewWindowRequest{uri: "https://example.com/"}},
+		{name: "URL read failure", request: &fakeNewWindowRequest{uriErr: errors.New("no uri")}, wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			err := refuseNewWindow(window, tt.request)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("refuseNewWindow error = %v, want error %v", err, tt.wantErr)
+			}
+			if !tt.request.handled {
+				t.Error("new-window request not marked handled, so WebView2 opens an unmanaged popup")
+			}
+		})
+	}
 }
