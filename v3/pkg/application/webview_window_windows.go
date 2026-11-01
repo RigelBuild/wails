@@ -2880,13 +2880,8 @@ func (w *windowsWebviewWindow) newWindowRequested(_ *edge.ICoreWebView2, args *e
 	if args == nil {
 		return
 	}
-	if uri, err := args.GetUri(); err != nil {
-		globalApplication.error("webview2: reading new window URL: %v", err)
-	} else {
-		allowNavigation(w.parent, NavigationRequest{URL: uri, IsMainFrame: true})
-	}
-	if err := args.PutHandled(true); err != nil {
-		globalApplication.error("webview2: refusing new window: %v", err)
+	if err := refuseNewWindow(w.parent, args); err != nil {
+		globalApplication.error("webview2: %v", err)
 	}
 }
 
