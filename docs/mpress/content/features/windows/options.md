@@ -730,7 +730,7 @@ OnBeforeNavigate: func(window application.Window, request application.Navigation
 - Called for **every** navigation of every frame: link clicks, form submissions, script-initiated loads, server redirects, and the window's own initial load and `SetURL` calls. A policy that refuses everything off the app's origin must still allow the app's own URLs, including in dev mode
 - Called on the main thread, and the navigation waits for the answer, so keep it quick. Window and application methods can be called from it
 - A panic counts as a refusal, and is reported to the application's `PanicHandler`. On Windows, a URL WebView2 cannot report also refuses
-- On Windows, a refused new-window request opens no window; an allowed one keeps WebView2's default popup
+- A new-window request (`target="_blank"`, `window.open`) is passed to the policy but never opens a window, whether it is allowed or refused. On Windows, a default WebView2 popup would not carry the policy. To open the link in the user's browser, call `Browser.OpenURL` from the policy
 - To send a refused link to the user's browser instead, call `application.Get().Browser.OpenURL(request.URL)` before returning `false`
 
 **Platform:** On iOS and Android it is ignored, and a warning is logged when the window is created.
