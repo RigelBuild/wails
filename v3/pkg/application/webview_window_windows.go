@@ -2914,17 +2914,17 @@ func (w *windowsWebviewWindow) allowNavigation(args *edge.ICoreWebView2Navigatio
 
 // newWindowRequested applies the window's OnBeforeNavigate to a request to
 // open a new window (target="_blank", window.open), a new top-level document.
-// Marking the request handled without supplying a window stops WebView2 from
-// opening one; an allowed request keeps WebView2's default handling.
+// The request is always marked handled without supplying a window: WebView2's
+// default popup would not carry the policy, and macOS and Linux open no window
+// for these requests either.
 func (w *windowsWebviewWindow) newWindowRequested(_ *edge.ICoreWebView2, args *edge.ICoreWebView2NewWindowRequestedEventArgs) {
 	if args == nil {
 		return
 	}
-	uri, err := args.GetUri()
-	if err != nil {
+	if uri, err := args.GetUri(); err != nil {
 		globalApplication.error("webview2: reading new window URL: %v", err)
-	} else if allowNavigation(w.parent, NavigationRequest{URL: uri, IsMainFrame: true}) {
-		return
+	} else {
+		allowNavigation(w.parent, NavigationRequest{URL: uri, IsMainFrame: true})
 	}
 	if err := args.PutHandled(true); err != nil {
 		globalApplication.error("webview2: refusing new window: %v", err)
