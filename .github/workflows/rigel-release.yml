@@ -119,8 +119,13 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --verify-tag --latest=false --title "$TAG" \
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if gh release view "$TAG" --json assets --jq '.assets | length' | grep -qv '^0$'; then
+              echo "release $TAG already has assets; refusing to replace them" >&2
+              exit 1
+            fi
+            gh release upload "$TAG" wails3-*.tar.gz SHA256SUMS
+          else
+            gh release create "$TAG" wails3-*.tar.gz SHA256SUMS --verify-tag --latest=false --title "$TAG" \
               --notes "Prebuilt wails3 CLI for this fork, built from ${GITHUB_SHA}."
           fi
-          gh release upload "$TAG" wails3-*.tar.gz SHA256SUMS --clobber

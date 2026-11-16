@@ -11,6 +11,7 @@
         "x86_64-linux"
         "aarch64-linux"
       ];
+      release = import ./nix/release-assets.nix;
       forSystems = nixpkgs.lib.genAttrs systems;
       packageFor =
         system: allowUnpinned:
@@ -20,23 +21,25 @@
         let
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
           package = packageFor system true;
-          release = import ./nix/release-assets.nix;
+          asset = release.assets.${system};
           buildInputs = package.nativeBuildInputs ++ package.buildInputs ++ package.propagatedBuildInputs;
           inputNames = map (input: input.name or (builtins.baseNameOf (toString input))) buildInputs;
         in
         assert builtins.isString package.drvPath;
-        assert package.src.name == release.assets.${system}.name;
+        assert package.src.name == asset.name;
         assert package.sourceRoot == ".";
         assert package.dontConfigure;
         assert package.dontBuild;
         assert !(builtins.any (name: nixpkgs.lib.hasInfix "go" name) inputNames);
         assert !(builtins.any (name: nixpkgs.lib.hasInfix "buildGoModule" name) inputNames);
-        pkgs.runCommand "wails3-fetch-only-evaluation-${system}" { } ''
+        pkgs.runCommand "wails3-fetch-only-evaluation-${system}" (
+          nixpkgs.lib.optionalAttrs (asset.hash != null) { inherit (package) src; }
+        ) ''
           touch "$out"
         '';
     in
     {
-      packages = nixpkgs.lib.genAttrs (builtins.filter (system: (import ./nix/release-assets.nix).assets.${system}.hash != null) systems) (
+      packages = nixpkgs.lib.genAttrs (builtins.filter (system: release.assets.${system}.hash != null) systems) (
         system:
         {
           wails3 = packageFor system false;
