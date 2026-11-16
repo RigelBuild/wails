@@ -120,7 +120,8 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
-            if gh release view "$TAG" --json assets --jq '.assets | length' | grep -qv '^0$'; then
+            count="$(gh release view "$TAG" --json assets --jq '.assets | length')"
+            if [ "$count" -ne 0 ]; then
               echo "release $TAG already has assets; refusing to replace them" >&2
               exit 1
             fi

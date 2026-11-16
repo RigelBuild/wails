@@ -24,6 +24,16 @@
           asset = release.assets.${system};
           buildInputs = package.nativeBuildInputs ++ package.buildInputs ++ package.propagatedBuildInputs;
           inputNames = map (input: input.name or (builtins.baseNameOf (toString input))) buildInputs;
+          # Fetch with x86_64-linux pkgs so a darwin asset does not need a darwin builder.
+          pinnedSrc =
+            if asset.hash != null then
+              pkgs.fetchurl {
+                url = "https://github.com/RigelBuild/wails/releases/download/${release.tag}/${asset.name}";
+                name = asset.name;
+                inherit (asset) hash;
+              }
+            else
+              null;
         in
         assert builtins.isString package.drvPath;
         assert package.src.name == asset.name;
@@ -32,9 +42,8 @@
         assert package.dontBuild;
         assert !(builtins.any (name: nixpkgs.lib.hasInfix "go" name) inputNames);
         assert !(builtins.any (name: nixpkgs.lib.hasInfix "buildGoModule" name) inputNames);
-        pkgs.runCommand "wails3-fetch-only-evaluation-${system}" (
-          nixpkgs.lib.optionalAttrs (asset.hash != null) { inherit (package) src; }
-        ) ''
+        pkgs.runCommand "wails3-fetch-only-evaluation-${system}" { } ''
+          ${nixpkgs.lib.optionalString (asset.hash != null) "test -s ${pinnedSrc}"}
           touch "$out"
         '';
     in
