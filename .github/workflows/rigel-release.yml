@@ -1,0 +1,132 @@
+name: Rigel Release
+
+on:
+  push:
+    tags:
+      - 'rigel-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux:
+    name: Build linux CLI binaries
+    runs-on: ubuntu-latest
+    env:
+      GOWORK: 'off'
+      CGO_ENABLED: '0'
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: v3/go.mod
+          cache: false
+
+      - name: Build linux CLI binaries
+        working-directory: v3
+        run: |
+          set -euo pipefail
+          mkdir -p ../dist
+          for target in linux/amd64 linux/arm64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            name="wails3-${goos}-${goarch}"
+            stage="$(mktemp -d)"
+            GOOS="$goos" GOARCH="$goarch" go build -trimpath -o "$stage/wails3" ./cmd/wails3
+            tar -C "$stage" -czf "../dist/${name}.tar.gz" wails3
+            rm -rf "$stage"
+          done
+
+      - name: Upload linux binaries
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cli-linux
+          path: dist/wails3-linux-*.tar.gz
+          if-no-files-found: error
+
+  build-darwin:
+    name: Build darwin CLI binary
+    runs-on: macos-latest
+    env:
+      GOWORK: 'off'
+      CGO_ENABLED: '1'
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: v3/go.mod
+          cache: false
+
+      - name: Build darwin CLI binary
+        working-directory: v3
+        run: |
+          set -euo pipefail
+          mkdir -p ../dist
+          stage="$(mktemp -d)"
+          GOOS=darwin GOARCH=arm64 go build -trimpath -o "$stage/wails3" ./cmd/wails3
+          tar -C "$stage" -czf ../dist/wails3-darwin-arm64.tar.gz wails3
+          rm -rf "$stage"
+
+      - name: Upload darwin binary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cli-darwin
+          path: dist/wails3-darwin-arm64.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [build-linux, build-darwin]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Download linux binaries
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: cli-linux
+          path: dist
+
+      - name: Download darwin binary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: cli-darwin
+          path: dist
+
+      - name: Write SHA256SUMS
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum wails3-*.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish GitHub Release
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            count="$(gh release view "$TAG" --json assets --jq '.assets | length')"
+            if [ "$count" -ne 0 ]; then
+              echo "release $TAG already has assets; refusing to replace them" >&2
+              exit 1
+            fi
+            gh release upload "$TAG" wails3-*.tar.gz SHA256SUMS
+          else
+            gh release create "$TAG" wails3-*.tar.gz SHA256SUMS --verify-tag --latest=false --title "$TAG" \
+              --notes "Prebuilt wails3 CLI for this fork, built from ${GITHUB_SHA}."
+          fi
