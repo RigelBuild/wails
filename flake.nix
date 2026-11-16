@@ -36,10 +36,13 @@
         '';
     in
     {
-      packages = forSystems (system: {
-        wails3 = packageFor system false;
-        default = packageFor system false;
-      });
+      packages = nixpkgs.lib.genAttrs (builtins.filter (system: (import ./nix/release-assets.nix).assets.${system}.hash != null) systems) (
+        system:
+        {
+          wails3 = packageFor system false;
+          default = packageFor system false;
+        }
+      );
 
       checks.x86_64-linux = builtins.listToAttrs (
         map (system: {
